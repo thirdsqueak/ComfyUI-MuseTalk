@@ -10,7 +10,7 @@ import numpy as np
 import os
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model=384, max_len=5000):
+    def __init__(self, d_model=384, max_len=5000):#384
         super(PositionalEncoding, self).__init__()
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -30,7 +30,7 @@ class UNet():
     def __init__(self, 
                  unet_config,
                  model_path,
-                 use_float16=False,
+                 use_float16=True,#false is default lesha
         ):
         with open(unet_config, 'r') as f:
             unet_config = json.load(f)

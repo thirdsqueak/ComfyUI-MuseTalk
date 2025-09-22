@@ -1,9 +1,6 @@
 task_0:
- video_path: "data/video/monalisa.mp4"
- audio_path: "data/audio/monalisa.wav"
+ video_path: "/home/lesha/projects/MuseTalk52/data/video/3sectest.wav"
+ audio_path: "/home/lesha/projects/MuseTalk52/data/audio/52.wav"
 
-task_1:
- video_path: "data/video/sun.mp4"
- audio_path: "data/audio/sun.wav"
-  
+
 

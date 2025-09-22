@@ -7,36 +7,66 @@ import numpy as np
 from PIL import Image
 import os
 
-class VAE():
-    """
-    VAE (Variational Autoencoder) class for image processing.
-    """
+# class VAE():
+#     """
+#     VAE (Variational Autoencoder) class for image processing.
+#     """
 
+#     def __init__(self, model_path="./models/sd-vae-ft-mse/", resized_img=256, use_float16=True):
+#         """
+#         Initialize the VAE instance.
+
+#         :param model_path: Path to the trained model.
+#         :param resized_img: The size to which images are resized.
+#         :param use_float16: Whether to use float16 precision.
+#         """
+#         self.model_path = model_path
+#         self.vae = AutoencoderKL.from_pretrained(self.model_path)
+
+#         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#         self.vae.to(self.device)
+
+#         if use_float16:
+#             self.vae = self.vae.half()
+#             self._use_float16 = True
+#         else:
+#             self._use_float16 = False
+
+#         self.scaling_factor = self.vae.config.scaling_factor
+#         self.transform = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+#         self._resized_img = resized_img
+#         self._mask_tensor = self.get_mask_tensor()
+        
+import torch.nn as nn
+
+class VAE(nn.Module):
     def __init__(self, model_path="./models/sd-vae-ft-mse/", resized_img=256, use_float16=False):
-        """
-        Initialize the VAE instance.
+        super(VAE, self).__init__()
 
-        :param model_path: Path to the trained model.
-        :param resized_img: The size to which images are resized.
-        :param use_float16: Whether to use float16 precision.
-        """
         self.model_path = model_path
         self.vae = AutoencoderKL.from_pretrained(self.model_path)
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.vae.to(self.device)
-
-        if use_float16:
-            self.vae = self.vae.half()
-            self._use_float16 = True
-        else:
-            self._use_float16 = False
-
+        self._resized_img = resized_img
+        self._use_float16 = use_float16
         self.scaling_factor = self.vae.config.scaling_factor
         self.transform = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-        self._resized_img = resized_img
         self._mask_tensor = self.get_mask_tensor()
-        
+
+        if self._use_float16:
+            self.vae = self.vae.half()
+
+    def forward(self, x):
+        # обычный forward можно оставить пустым или реализовать по необходимости
+        return self.encode_latents(x)
+
+    def get_mask_tensor(self):
+        mask_tensor = torch.zeros((self._resized_img, self._resized_img))
+        mask_tensor[:self._resized_img // 2, :] = 1
+        mask_tensor = (mask_tensor >= 0.5).float()
+        return mask_tensor
+
+    # Остальные методы (preprocess_img, encode_latents, decode_latents, get_latents_for_unet) — без изменений
+
     def get_mask_tensor(self):
         """
         Creates a mask tensor for image processing.

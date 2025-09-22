@@ -4,12 +4,17 @@ from os import listdir, path
 import subprocess
 import numpy as np
 import cv2
+from concurrent.futures import ThreadPoolExecutor
 import pickle
 import os
 import json
 from mmpose.apis import inference_topdown, init_model
 from mmpose.structures import merge_data_samples
 import torch
+import torch.serialization
+import numpy.core.multiarray
+torch.serialization.add_safe_globals([numpy.core.multiarray._reconstruct])
+
 from tqdm import tqdm
 import comfy.utils
 
@@ -45,10 +50,14 @@ def read_imgs(img_list):
     frames = []
     print('reading images...')
     pbar = comfy.utils.ProgressBar(len(img_list))
-    for img_path in tqdm(img_list):
-        frame = cv2.imread(img_path)
-        frames.append(frame)
-        pbar.update(1)
+    def read_single(path):
+        return cv2.imread(path)
+    with ThreadPoolExecutor(max_workers=20) as executor:  # можно изменить max_workers
+        frames = list(tqdm(executor.map(read_single, img_list), total=len(img_list)))
+    # for img_path in tqdm(img_list):
+    #     frame = cv2.imread(img_path)
+    #     frames.append(frame)
+    #     pbar.update(1)
     return frames
 
 def get_landmark_and_bbox_frames(frames,upperbondrange =0):

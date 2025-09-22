@@ -23,13 +23,56 @@ from musetalk.whisper.audio2feature import Audio2Feature
 from musetalk.models.vae import VAE
 from musetalk.models.unet import UNet,PositionalEncoding
 
-def load_all_model():
+# def load_all_model():
+#     audio_processor = Audio2Feature(model_path=f"{MuseVCheckPointDir}/whisper/tiny.pt")
+#     vae = VAE(model_path = f"{MuseVCheckPointDir}/sd-vae-ft-mse/")
+#     unet = UNet(unet_config=f"{MuseVCheckPointDir}/musetalk/musetalk.json",
+#                 model_path =f"{MuseVCheckPointDir}/musetalk/pytorch_model.bin")
+#     pe = PositionalEncoding(d_model=384)
+#     return audio_processor,vae,unet,pe
+
+def load_all_model(device=None, dtype=torch.float32):
+    if device is None:
+        device = torch.device('cpu')  #'cuda' if torch.cuda.is_available() else 
+    if device == 'cuda':
+        try:
+            dtype = torch.float8_e4m3fn
+            print("Using float8_e4m3fn")
+        except AttributeError:
+            print("float8 not supported set bfloat16.")
+        dtype = torch.bfloat16
+    else:
+        try:
+            dtype = torch.float16
+            print("Using float16")
+        except AttributeError:
+            print("float16 not supported set float32")
+            dtype = torch.float32
+        
     audio_processor = Audio2Feature(model_path=f"{MuseVCheckPointDir}/whisper/tiny.pt")
-    vae = VAE(model_path = f"{MuseVCheckPointDir}/sd-vae-ft-mse/")
-    unet = UNet(unet_config=f"{MuseVCheckPointDir}/musetalk/musetalk.json",
-                model_path =f"{MuseVCheckPointDir}/musetalk/pytorch_model.bin")
-    pe = PositionalEncoding(d_model=384)
-    return audio_processor,vae,unet,pe
+
+    vae = VAE(model_path=f"{MuseVCheckPointDir}/sd-vae-ft-mse/")
+    unet = UNet(
+        unet_config=f"{MuseVCheckPointDir}/musetalk/musetalk.json",
+        model_path=f"{MuseVCheckPointDir}/musetalk/pytorch_model.bin"
+    )
+    pe = PositionalEncoding(d_model=384)  # 384  
+
+    vae.vae = vae.vae.to(device=device, dtype=dtype)
+    unet.model = unet.model.to(device=device, dtype=dtype)
+    pe = pe.to(device=device, dtype=dtype)
+
+    print(f"[vae] dtype: {next(vae.vae.parameters()).dtype}")
+    print(f"[unet] dtype: {next(unet.model.parameters()).dtype}")
+    # print(f"[pe] dtype: {next(pe.parameters()).dtype if hasattr(pe, 'parameters') else pe.dtype}")
+    if hasattr(pe, "parameters") and any(True for _ in pe.parameters()):
+        print(f"[pe] dtype: {next(pe.parameters()).dtype}")
+    else:
+        print(f"[pe] dtype: {getattr(pe, 'dtype', 'no dtype attr')}")
+    
+    print(device.type)    # cpu
+    return audio_processor, vae, unet, pe
+
 
 def get_file_type(video_path):
     _, ext = os.path.splitext(video_path)
@@ -67,3 +110,10 @@ def datagen(whisper_chunks,vae_encode_latents,batch_size=8,delay_frame = 0):
         latent_batch = torch.cat(latent_batch, dim=0)
 
         yield whisper_batch, latent_batch
+        
+# def unload_model(vae=None, unet=None, pe=None):
+#     del vae
+#     del unet
+#     del pe
+#     torch.cuda.empty_cache()
+#     torch.cuda.ipc_collect()

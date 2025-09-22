@@ -9,23 +9,85 @@ import pickle
 from tqdm import tqdm
 import copy
 
-from musetalk.utils.utils import get_file_type,get_video_fps,datagen
+from musetalk.utils.utils import get_file_type,get_video_fps,datagen#, unload_model
 from musetalk.utils.preprocessing import get_landmark_and_bbox,read_imgs,coord_placeholder
 from musetalk.utils.blending import get_image
 from musetalk.utils.utils import load_all_model
 
-# load model weights
-audio_processor,vae,unet,pe  = load_all_model()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-timesteps = torch.tensor([0], device=device)
+
+
+# # load model weights
+# vae,unet,pe  = load_all_model() #audio_processor,
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# timesteps = torch.tensor([0], device=device)
+
+# unload_model(vae, unet, pe)
+
+# def load_all_model(args, device):
+#     # Загружаем модели
+#     vae, unet, pe = load_all_model(
+#         unet_model_path=args.unet_model_path,
+#         vae_type=args.vae_type,
+#         unet_config=args.unet_config,
+#         device=device
+#     )
+
+#     # Переводим в half precision, если нужно
+#     # if args.use_float16:
+#     # pe = pe.half()
+#     # vae.vae = vae.vae.half()
+#     # unet.model = unet.model.half()
+    
+#     dtype = torch.bfloat16
+    
+#     # Переносим на нужное устройство
+#     # pe = pe.to(device)
+#     # vae.vae = vae.vae.to(device)
+#     # unet.model = unet.model.to(device)
+    
+#     pe = pe.to(dtype=dtype, device=device)
+#     vae.vae = vae.vae.to(dtype=dtype, device=device)
+#     unet.model = unet.model.to(dtype=dtype, device=device)
+#     # Создаём timesteps
+#     timesteps = torch.tensor([0], device=device)
+
+#     return vae, unet, pe, timesteps
+
 
 @torch.no_grad()
 def main(args):
+    audio_processor, vae, unet, pe,  = load_all_model(
+            unet_model_path=args.unet_model_path,
+            vae_type=args.vae_type,
+            unet_config=args.unet_config,
+            device=device
+        )
+    try:
+            dtype = torch.float8_e4m3fn
+            print("Using float8_e4m3fn (BF8)...")
+    except AttributeError:
+            print("float8 not supported in this PyTorch version. Falling back to bfloat16.")
+            dtype = torch.bfloat16
+
+        # Применяем dtype к моделям
+    pe = pe.to(dtype=dtype, device=device)
+    print(f"[pe] dtype: {next(pe.parameters()).dtype if hasattr(pe, 'parameters') else pe.dtype}")
+
+    vae.vae = vae.vae.to(dtype=dtype, device=device)
+    print(f"[vae] dtype: {next(vae.vae.parameters()).dtype}")
+
+    unet.model = unet.model.to(dtype=dtype, device=device)
+    print(f"[unet] dtype: {next(unet.model.parameters()).dtype}")
+
+        # Создаём timesteps
+    timesteps = torch.tensor([0], device=device)
+
     inference_config = OmegaConf.load(args.inference_config)
     print(inference_config)
     for task_id in inference_config:
         video_path = inference_config[task_id]["video_path"]
-        audio_path = inference_config[task_id]["audio_path"]
+        audio_path = inference_config[task_id]["/home/lesha/projects/MuseTalk52/data/audio/52.wav"]
 
         input_basename = os.path.basename(video_path).split('.')[0]
         audio_basename  = os.path.basename(audio_path).split('.')[0]
@@ -54,6 +116,22 @@ def main(args):
         ############################################## extract audio feature ##############################################
         whisper_feature = audio_processor.audio2feat(audio_path)
         whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature,fps=fps)
+        # ======= ПОСЛЕ: (новое, с загрузкой и выгрузкой)
+        # from musetalk.utils.utils import load_all_model
+        # import gc
+
+        # # загружаем модель
+        # audio_processor, _, _, _ = load_all_model()
+
+        # # инференс
+        # whisper_feature = audio_processor.audio2feat(audio_path)
+        # whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature, fps=fps)
+
+        # # освобождаем память
+        # del audio_processor
+        # torch.cuda.empty_cache()
+        # gc.collect()
+
         ############################################## preprocess input image  ##############################################
         if os.path.exists(crop_coord_save_path) and args.use_saved_coord:
             print("using extracted coordinates")
@@ -132,7 +210,7 @@ if __name__ == "__main__":
     parser.add_argument("--result_dir", default='./results', help="path to output")
 
     parser.add_argument("--fps",type=int, default=25)
-    parser.add_argument("--batch_size",type=int, default=8)
+    parser.add_argument("--batch_size",type=int, default=1)
     parser.add_argument("--output_vid_name",type=str,default='')
     parser.add_argument("--use_saved_coord",action="store_true", help='use saved coordinate to save time')
 
